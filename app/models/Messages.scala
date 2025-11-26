@@ -2,6 +2,8 @@
 package models
 
 import play.api.libs.json._
+import de.htwg.se.backgammon.model.Player
+import de.htwg.se.backgammon.model.IGame
 
 sealed trait ClientMessage
 case class JoinLobby(user: String) extends ClientMessage
@@ -33,9 +35,60 @@ object ClientMessage {
 
 }
 
-
-case class ServerMessage(message: String)
-
-object ServerMessage {
-  implicit val format: Format[ServerMessage] = Json.format[ServerMessage]
+sealed trait OutgoingMessage {
+  def messageType: String
+  def timestamp: Long = System.currentTimeMillis()
 }
+
+object OutgoingMessage {
+
+  val playerAssignedFormat = Json.format[PlayerAssigned]
+  val chatBroadcastFormat = Json.format[ChatBroadcast]
+  val serverInfoFormat    = Json.format[ServerInfo]
+  val gameUpdateFormat    = Json.format[GameUpdate]
+
+  implicit val writes: Writes[OutgoingMessage] = Writes {
+    case m: PlayerAssigned =>
+      Json.obj(
+        "type"      -> m.messageType,
+        "timestamp" -> m.timestamp,
+        "data"      -> Json.toJson(m)(using playerAssignedFormat)
+      )
+
+    case m: ChatBroadcast =>
+      Json.obj(
+        "type"      -> m.messageType,
+        "timestamp" -> m.timestamp,
+        "data"      -> Json.toJson(m)(using chatBroadcastFormat)
+      )
+
+    case m: ServerInfo =>
+      Json.obj(
+        "type"      -> m.messageType,
+        "timestamp" -> m.timestamp,
+        "data"      -> Json.toJson(m)(using serverInfoFormat)
+      )
+    case m: GameUpdate => Json.obj(
+        "type"      -> m.messageType,
+        "timestamp" -> m.timestamp,
+        "data"      -> Json.toJson(m)(using gameUpdateFormat)
+      )
+  }
+}
+
+case class ServerInfo(text: String) extends OutgoingMessage {
+  val messageType = "ServerInfo"
+}
+
+case class ChatBroadcast(user: String, text: String) extends OutgoingMessage {
+  val messageType = "ChatBroadcast"
+}
+
+case class PlayerAssigned(color: Player) extends OutgoingMessage {
+  val messageType = "PlayerAssigned"
+}
+
+case class GameUpdate(game: IGame, currentPlayer: Player, dice: List[Int]) extends OutgoingMessage {
+    val messageType = "GameUpdate"
+}
+

@@ -29,7 +29,7 @@ class LobbyController @Inject()(cc: ControllerComponents)
   private val lobbyManager = system.actorOf(Props[LobbyManager](), "lobbyManager")
 
   // Create a new lobby with auto-generated ID
-  def createLobby : Action[JsValue] = Action(parse.json) { request =>
+  def createLobby: Action[JsValue] = Action(parse.json) { request =>
     val options = request.body.validate[LobbyOptions].asOpt.getOrElse(LobbyOptions())
     val lobbyId = UUID.randomUUID().toString
     lobbyManager ! ("create", lobbyId, options)
@@ -40,7 +40,7 @@ class LobbyController @Inject()(cc: ControllerComponents)
     val lobby = getOrCreateLobby(lobbyId)
     
     // Source for messages from the server to this client
-    val (outActor, source) = Source.actorRef[ServerMessage](
+    val (outActor, source) = Source.actorRef[OutgoingMessage](
       completionMatcher = PartialFunction.empty,
       failureMatcher = PartialFunction.empty,
       bufferSize = 16,
