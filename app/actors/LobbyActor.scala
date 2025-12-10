@@ -8,6 +8,9 @@ import de.htwg.se.backgammon.model.Player
 import scala.concurrent.duration.DurationInt
 
 case class CheckDisconnectTimeout(user: String)
+case object GetLobbyState
+case class LobbyState(gameStarted: Boolean, scope: LobbyScope)
+
 
 case class PlayerSlot(
   color: Player,
@@ -102,6 +105,9 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
           }
         case _ => 
       }
+    case GetLobbyState =>
+      sender() ! LobbyState(gameStarted, options.scope)
+
   }
 
   private def broadcastLobbyUpdate(): Unit = {

@@ -10,7 +10,6 @@ case class JoinLobby(user: String) extends ClientMessage
 case class ChatMessage(text: String) extends ClientMessage
 case class MoveMessage(from: String, to: String) extends ClientMessage
 
-
 object ClientMessage {
   implicit val joinFormat: OFormat[JoinLobby] = Json.format[JoinLobby]
   implicit val chatFormat: OFormat[ChatMessage] = Json.format[ChatMessage]
