@@ -34,8 +34,16 @@ import play.filters.csrf._
 @Singleton
 class HomeController @Inject()(val controllerComponents: ControllerComponents, val gameController: IController)(implicit mat: Materializer, ec: ExecutionContext) extends BaseController {
 
+  def cors(result: Result): Result = {
+      result.withHeaders(
+        "Access-Control-Allow-Origin" -> "http://localhost:5173",
+        "Access-Control-Allow-Methods" -> "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers" -> "Content-Type"
+      )
+  }
+
   def index = Action {implicit request: Request[AnyContent] =>
-    Ok(views.html.index(gameController))
+    cors(Ok(""))
   }
 
   def undo = Action {implicit request: Request[AnyContent] =>

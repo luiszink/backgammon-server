@@ -23,6 +23,9 @@ import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import play.api.libs.streams.ActorFlow
 
+import play.api.mvc._
+import play.api.mvc.Results._
+
 case object StopActor
 
 @Singleton
@@ -34,10 +37,18 @@ class LobbyController @Inject() (
 )(implicit system: ActorSystem, mat: Materializer, ec: ExecutionContext)
     extends AbstractController(cc) {
 
+  def cors(result: Result): Result = {
+      result.withHeaders(
+        "Access-Control-Allow-Origin" -> "http://localhost:5173",
+        "Access-Control-Allow-Methods" -> "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers" -> "Content-Type"
+      )
+  }
+
   def countPublicWaiting(): Action[AnyContent] = Action.async {
     (lobbyManager ? CountPublicWaitingLobbies)
       .mapTo[Int]
-      .map(count => Ok(count.toString))
+      .map(count => cors(Ok(count.toString)))
   }
 
   def socket = WebSocket.accept[String, String] { request =>
