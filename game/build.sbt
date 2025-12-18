@@ -13,5 +13,4 @@ lazy val root = project
     libraryDependencies += "org.scalafx" %% "scalafx" % "21.0.0-R32",
     libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "2.2.0",
     libraryDependencies += "com.typesafe.play" %% "play-json" % "2.10.3",
-    coverageExcludedPackages := "<empty>;*view*;*PrettyPrint.scala"
   )
