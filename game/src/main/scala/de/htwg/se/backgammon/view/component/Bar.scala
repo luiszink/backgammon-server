@@ -52,7 +52,6 @@ case class Bar(
   private class Background extends Rectangle {
     private val BACKGROUND_PADDING = 5
 
-    update
     def update = {
       fill = Color.GREY
       x = xCoord - CHECKER_SIZE / 2 - BACKGROUND_PADDING
