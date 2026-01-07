@@ -1,0 +1,1 @@
+web: target/universal/stage/bin/backgammon-web -Dhttp.port=${PORT}
