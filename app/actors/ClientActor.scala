@@ -23,8 +23,10 @@ class ClientActor(lobby: ActorRef, user: String, out: ActorRef) extends Actor {
       this.player = Some(player)
       out ! PlayerAssigned(player)
     case msg: ServerInfo =>
+      println(s"[$user] Sending ServerInfo: ${msg.text}")
       out ! msg
     case msg: OutgoingMessage =>
+      println(s"[$user] Sending OutgoingMessage (${msg.messageType})")
       out ! msg
     case StopActor => 
       context.stop(self) 
