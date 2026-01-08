@@ -13,6 +13,11 @@ GET     /move                       controllers.HomeController.move(from: String
 GET     /api/hints                  controllers.HomeController.hints(from: Int)
 GET     /api/bearIn                 controllers.HomeController.bearIn()
 
+# Session and CSRF endpoints
+GET     /csrf-token                 controllers.HomeController.getCsrfToken
+GET     /get-username               controllers.HomeController.getUsername
+POST    /update-username            controllers.HomeController.updateUsername
+
 # Alle anderen Assets
 GET     /assets/*file             controllers.Assets.versioned(path="/public", file: Asset)
 

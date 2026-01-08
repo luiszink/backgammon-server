@@ -136,4 +136,28 @@ class HomeController @Inject()(val controllerComponents: ControllerComponents, v
         ))
     }
   }
+
+  def getCsrfToken: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+    val token = CSRF.getToken(request).map(_.value).getOrElse("")
+    Ok(token)
+  }
+
+  def getUsername: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+    val username = request.session.get("username").getOrElse("")
+    Ok(username)
+  }
+
+  def updateUsername: Action[AnyContent] = Action { implicit request: Request[AnyContent] =>
+    request.body.asFormUrlEncoded match {
+      case Some(formData) =>
+        formData.get("username").flatMap(_.headOption) match {
+          case Some(username) =>
+            Ok("Username updated").withSession("username" -> username)
+          case None =>
+            BadRequest("Username parameter missing")
+        }
+      case None =>
+        BadRequest("Invalid form data")
+    }
+  }
 }
