@@ -14,12 +14,14 @@ import actors.MatchmakerActor
 import org.apache.pekko.util.Timeout
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.ExecutionContext
+import firebase.FirebaseInit
 
 class Module extends AbstractModule {
 
   private val logger = Logger(this.getClass)
 
   override def configure(): Unit = {
+    FirebaseInit.init()
     bind(classOf[IController]).toInstance {
       val NUMBER_OF_FIELDS = 24
       val NUMBER_OF_FIGURES = 15

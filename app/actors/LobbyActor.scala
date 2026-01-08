@@ -6,13 +6,15 @@ import scala.collection.mutable
 import de.htwg.se.backgammon.controller.IController
 import de.htwg.se.backgammon.model.Player
 import scala.concurrent.duration.DurationInt
+import firebase.AuthUser
 
-case class CheckDisconnectTimeout(user: String)
+case class CheckDisconnectTimeout(user: AuthUser)
 case object GetLobbyState
 case class LobbyState(gameStarted: Boolean, scope: LobbyScope)
 
 
 case class PlayerSlot(
+  authUser: AuthUser,
   color: Player,
   actor: Option[ActorRef],
   disconnectTime: Option[Long]
@@ -25,35 +27,34 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
 
   def receive: Receive = {
     case Join(user, ref) =>
-      users.get(user) match {
+      users.get(user.uid) match {
 
         // Reconnect
-        case Some(slot @ PlayerSlot(color, None, _)) =>
-          users(user) = slot.copy(actor = Some(ref), disconnectTime = None)
+        case Some(slot @ PlayerSlot(_, color, None, _)) =>
+          users(user.uid) = slot.copy(actor = Some(ref), disconnectTime = None)
           ref ! PlayerAssigned(color)
           ref ! GameUpdate(controller.game, controller.currentPlayer, controller.dice)
           broadcastLobbyUpdate()
-          broadcast(s"$user reconnected")
+          broadcast(s"${user.name.getOrElse(color)} reconnected")
 
         // Already connected
-        case Some(PlayerSlot(_, Some(_), _)) =>
+        case Some(PlayerSlot(_, _, Some(_), _)) =>
           ref ! ServerInfo("You are already connected.")
           context.stop(ref)
 
         // New player
         case None if users.size < 2 =>
-          print(s"User connected $user")
           val color = if (users.isEmpty) Player.White else Player.Black
-          val slot = PlayerSlot(color, Some(ref), None)
-          users += user -> slot
+          val slot = PlayerSlot(user, color, Some(ref), None)
+          users += user.uid -> slot
 
           ref ! PlayerAssigned(color)
           ref ! GameUpdate(controller.game, controller.currentPlayer, controller.dice)
-          if (user.size == 2) {
+          if (users.size == 2) {
             gameStarted = true
           }
           broadcastLobbyUpdate()
-          broadcast(s"$user joined the lobby")
+          broadcast(s"${user.name.getOrElse(color)} joined the lobby")
 
         // Lobby full for new usernames
         case None =>
@@ -61,24 +62,24 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
           context.stop(ref)
     }
     case BroadcastMessage(user, text) =>
-      broadcast(ChatBroadcast(user, text))
+      broadcast(ChatBroadcast(user.name.getOrElse("Guest"), text))
     case Leave(user) =>
-      users.get(user) match {
+      users.get(user.uid) match {
         case Some(slot) =>
           val now = System.currentTimeMillis()
-          users(user) = slot.copy(actor = None, disconnectTime = Some(now))
+          users(user.uid) = slot.copy(actor = None, disconnectTime = Some(now))
           broadcastLobbyUpdate()
-          broadcast(s"$user disconnected")
+          broadcast(s"${user.name.getOrElse(slot.color)} disconnected")
 
           context.system.scheduler.scheduleOnce(1.minute)(
             self ! CheckDisconnectTimeout(user)
-          )(context.dispatcher)
+          )(using context.dispatcher)
 
         case None => // ignore
       }
     case CheckDisconnectTimeout(user) =>
-      users.get(user) match {
-        case Some(PlayerSlot(_, _, Some(disconnectTime))) =>
+      users.get(user.uid) match {
+        case Some(PlayerSlot(_, _, _, Some(disconnectTime))) =>
           val now = System.currentTimeMillis()
           val elapsed = now - disconnectTime
 
@@ -91,8 +92,8 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
         case _ =>
       }
     case Move(user, from, to) => 
-      users.get(user) match {
-        case Some(PlayerSlot(color, Some(actor), disconnectTime)) => 
+      users.get(user.uid) match {
+        case Some(PlayerSlot(user, color, Some(actor), disconnectTime)) => 
           if (color != controller.currentPlayer) {
             actor ! ServerInfo("It's not your turn!")
           } else {
@@ -114,9 +115,9 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
     def getUser(color: Player): Option[User] =
       users
         .find(_._2.color == color)
-        .map { case (name, slot) =>
+        .map { case (uid, slot) =>
           User(
-            name = name,
+            name = slot.authUser.name.getOrElse("Guest"),
             connected = slot.actor.isDefined
           )
         }

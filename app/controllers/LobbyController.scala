@@ -25,6 +25,7 @@ import play.api.libs.streams.ActorFlow
 
 import play.api.mvc._
 import play.api.mvc.Results._
+import firebase.FirebaseAuthService
 
 case object StopActor
 
@@ -64,37 +65,59 @@ class LobbyController @Inject() (
     Ok(Json.obj("lobbyId" -> lobbyId))
   }
 
-  def joinLobby(lobbyId: String, user: String) =
-    WebSocket.accept[JsValue, JsValue] { _ =>
-      val lobby = getOrCreateLobby(lobbyId)
+  def joinLobby(lobbyId: String): WebSocket =
+    WebSocket.acceptOrResult[JsValue, JsValue] { request =>
 
-      // Source for messages from the server to this client
-      val (outActor, source) = Source
-        .actorRef[OutgoingMessage](
-          completionMatcher = PartialFunction.empty,
-          failureMatcher = PartialFunction.empty,
-          bufferSize = 16,
-          overflowStrategy = OverflowStrategy.dropHead
-        )
-        .map(msg => Json.toJson(msg): JsValue)
-        .preMaterialize()
+      request.getQueryString("token") match {
 
-      // Sink for messages from client to lobby
-      val clientActor =
-        system.actorOf(Props(new ClientActor(lobby, user, outActor)))
+        case Some(token) =>
+          try {
+            val authUser = FirebaseAuthService.verify(token)
+            val lobby = getOrCreateLobby(lobbyId)
 
-      val sink: Sink[JsValue, NotUsed] = Flow[JsValue]
-        .map(js => ClientMessage.fromJson(js))
-        .collect { case JsSuccess(msg, _) => msg }
-        .to(
-          Sink.actorRef(
-            clientActor,
-            onCompleteMessage = StopActor,
-            onFailureMessage = ex => "failure"
-          )
-        )
+            // Source: server → client
+            val (outActor, source) =
+              Source
+                .actorRef[OutgoingMessage](
+                  completionMatcher = PartialFunction.empty,
+                  failureMatcher = PartialFunction.empty,
+                  bufferSize = 16,
+                  overflowStrategy = OverflowStrategy.dropHead
+                )
+                .map(msg => Json.toJson(msg): JsValue)
+                .preMaterialize()
 
-      Flow.fromSinkAndSource(sink, source)
+            // Client actor
+            val clientActor =
+              system.actorOf(
+                Props(new ClientActor(lobby, authUser, outActor))
+              )
+
+            // Sink: client → server
+            val sink: Sink[JsValue, NotUsed] =
+              Flow[JsValue]
+                .map(ClientMessage.fromJson)
+                .collect { case JsSuccess(msg, _) => msg }
+                .to(
+                  Sink.actorRef(
+                    clientActor,
+                    onCompleteMessage = StopActor,
+                    onFailureMessage = _ => StopActor
+                  )
+                )
+
+            Future.successful(
+              Right(Flow.fromSinkAndSource(sink, source))
+            )
+
+          } catch {
+            case _: Exception =>
+              Future.successful(Left(Forbidden("Invalid Firebase token")))
+          }
+
+        case None =>
+          Future.successful(Left(Unauthorized("Missing token")))
+      }
     }
 
   private def getOrCreateLobby(lobbyId: String): ActorRef = {
