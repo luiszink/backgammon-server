@@ -42,16 +42,19 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
 
         // New player
         case None if users.size < 2 =>
-          print(s"User connected $user")
+          println(s"User connected: $user (total users: ${users.size + 1})")
           val color = if (users.isEmpty) Player.White else Player.Black
           val slot = PlayerSlot(color, Some(ref), None)
           users += user -> slot
 
           ref ! PlayerAssigned(color)
           ref ! GameUpdate(controller.game, controller.currentPlayer, controller.dice)
-          if (user.size == 2) {
+          
+          if (users.size == 2) {
             gameStarted = true
+            println(s"Game started! Both players connected.")
           }
+          
           broadcastLobbyUpdate()
           broadcast(s"$user joined the lobby")
 
@@ -126,8 +129,13 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
   }
 
   private def broadcast(msg: OutgoingMessage): Unit = {
-    println(s"send broadcast (${lobbyId}) $msg to ${users}")
-    users.values.flatMap(_.actor).foreach(_ ! msg)
+    val activeActors = users.values.flatMap(_.actor).toList
+    println(s"[Lobby $lobbyId] Broadcasting ${msg.messageType} to ${activeActors.size} clients")
+    println(s"[Lobby $lobbyId] Message: $msg")
+    activeActors.foreach { actor =>
+      println(s"[Lobby $lobbyId] Sending to actor: $actor")
+      actor ! msg
+    }
   }
 
   private def broadcast(msg: String): Unit = {

@@ -1,8 +1,12 @@
 {
   "name": "backgammon-web",
   "version": "0.1.0",
+  "description": "Backgammon Web Application",
   "engines": {
     "node": "20.x",
     "npm": "10.x"
+  },
+  "scripts": {
+    "postinstall": "echo 'Node.js installed for LESS compilation'"
   }
 }
