@@ -57,24 +57,8 @@ object OutgoingMessage {
   val lobbyUpdateFormat = Json.format[LobbyUpdate]
   val chatBroadcastFormat = Json.format[ChatBroadcast]
   val serverInfoFormat    = Json.format[ServerInfo]
-  
-  // Explicit GameUpdate writer to ensure proper serialization
-  implicit val gameUpdateWrites: Writes[GameUpdate] = Writes { gu =>
-    val gameJson = Json.toJson(gu.game)
-    val playerJson = Json.toJson(gu.currentPlayer)
-    val diceJson = Json.toJson(gu.dice)
-    
-    println(s"Serializing GameUpdate:")
-    println(s"  game: $gameJson")
-    println(s"  currentPlayer: $playerJson")
-    println(s"  dice: $diceJson")
-    
-    Json.obj(
-      "game" -> gameJson,
-      "currentPlayer" -> playerJson,
-      "dice" -> diceJson
-    )
-  }
+  val gameUpdateFormat    = Json.format[GameUpdate]
+  val timerTickFormat    = Json.format[TimerTick]
 
   implicit val writes: Writes[OutgoingMessage] = Writes {
     case m: PlayerAssigned =>
@@ -108,7 +92,16 @@ object OutgoingMessage {
         "timestamp" -> m.timestamp,
         "data"      -> Json.toJson(m)(using lobbyUpdateFormat)
       )
+    case m: TimerTick => Json.obj(
+        "type"      -> m.messageType,
+        "timestamp" -> m.timestamp,
+        "data"      -> Json.toJson(m)(using timerTickFormat)
+      )
   }
+}
+
+case class TimerTick(color: Player, seconds: Long) extends OutgoingMessage {
+  val messageType = "TimerTick"
 }
 
 case class ServerInfo(text: String) extends OutgoingMessage {
@@ -127,7 +120,7 @@ case class GameUpdate(game: IGame, currentPlayer: Player, dice: List[Int]) exten
     val messageType = "GameUpdate"
 }
 
-case class User (name: String, connected: Boolean)
+case class User (uid: String, name: String, connected: Boolean)
 
 object User {
   implicit val format: OFormat[User] = Json.format[User]

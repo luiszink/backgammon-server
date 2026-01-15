@@ -25,6 +25,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       guice,
       ws,
+    "com.google.firebase" % "firebase-admin" % "9.2.0",
       "org.apache.pekko" %% "pekko-stream-typed" % "1.0.3",
       // "backgammon" %% "backgammon" % "0.1.0-SNAPSHOT",
       "org.playframework"      %% "play-json"          % "3.0.6",

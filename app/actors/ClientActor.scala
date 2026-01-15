@@ -6,8 +6,9 @@ import play.api.libs.json._
 import play.libs.Json
 import de.htwg.se.backgammon.model.Player
 import controllers.StopActor
+import firebase.AuthUser
 
-class ClientActor(lobby: ActorRef, user: String, out: ActorRef) extends Actor {
+class ClientActor(lobby: ActorRef, user: AuthUser, out: ActorRef) extends Actor {
   private var player: Option[Player] = None
 
   override def preStart(): Unit = lobby ! Join(user, self)
@@ -34,7 +35,7 @@ class ClientActor(lobby: ActorRef, user: String, out: ActorRef) extends Actor {
 }
 
 object ClientActor {
-  def props(lobby: ActorRef, user: String, out: ActorRef): Props =
+  def props(lobby: ActorRef, user: AuthUser, out: ActorRef): Props =
     Props(new ClientActor(lobby, user, out))
 }
 

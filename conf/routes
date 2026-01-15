@@ -25,8 +25,12 @@ GET     /assets/*file             controllers.Assets.versioned(path="/public", f
 POST    /lobby                  controllers.LobbyController.createLobby
 
 # Join a lobby via WebSocket
-GET     /lobby/:lobbyId/ws     controllers.LobbyController.joinLobby(lobbyId: String, user: String)
+GET     /lobby/:lobbyId/ws     controllers.LobbyController.joinLobby(lobbyId: String)
 
 GET     /queue-ws              controllers.LobbyController.socket
 
 GET    /matchmaking/count     controllers.LobbyController.countPublicWaiting()
+
+GET    /user/:uid              controllers.UserController.fetchUser(uid: String)
+GET   /user/:uid/games         controllers.UserController.fetchUserGames(uid: String, page: Int ?= 1, pageSize: Int ?= 5)
+
