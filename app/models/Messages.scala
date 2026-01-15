@@ -119,7 +119,7 @@ case class GameUpdate(game: IGame, currentPlayer: Player, dice: List[Int]) exten
     val messageType = "GameUpdate"
 }
 
-case class User (name: String, connected: Boolean)
+case class User (uid: String, name: String, connected: Boolean)
 
 object User {
   implicit val format: OFormat[User] = Json.format[User]

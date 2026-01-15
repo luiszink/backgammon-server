@@ -209,6 +209,7 @@ class LobbyActor(
         .find(_._2.color == color)
         .map { case (uid, slot) =>
           User(
+            uid = uid,
             name = slot.authUser.name.getOrElse("Guest"),
             connected = slot.actor.isDefined
           )
