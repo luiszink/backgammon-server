@@ -58,6 +58,7 @@ object OutgoingMessage {
   val chatBroadcastFormat = Json.format[ChatBroadcast]
   val serverInfoFormat    = Json.format[ServerInfo]
   val gameUpdateFormat    = Json.format[GameUpdate]
+  val timerTickFormat    = Json.format[TimerTick]
 
   implicit val writes: Writes[OutgoingMessage] = Writes {
     case m: PlayerAssigned =>
@@ -90,7 +91,16 @@ object OutgoingMessage {
         "timestamp" -> m.timestamp,
         "data"      -> Json.toJson(m)(using lobbyUpdateFormat)
       )
+    case m: TimerTick => Json.obj(
+        "type"      -> m.messageType,
+        "timestamp" -> m.timestamp,
+        "data"      -> Json.toJson(m)(using timerTickFormat)
+      )
   }
+}
+
+case class TimerTick(color: Player, seconds: Long) extends OutgoingMessage {
+  val messageType = "TimerTick"
 }
 
 case class ServerInfo(text: String) extends OutgoingMessage {

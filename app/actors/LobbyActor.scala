@@ -7,23 +7,63 @@ import de.htwg.se.backgammon.controller.IController
 import de.htwg.se.backgammon.model.Player
 import scala.concurrent.duration.DurationInt
 import firebase.AuthUser
+import scala.concurrent.duration.FiniteDuration
+import java.time.Instant
+import firebase.FirestoreGameRepository
+import com.google.inject.Inject
+import javax.inject.Named
+import firebase.model.*
 
 case class CheckDisconnectTimeout(user: AuthUser)
 case object GetLobbyState
 case class LobbyState(gameStarted: Boolean, scope: LobbyScope)
 
-
 case class PlayerSlot(
-  authUser: AuthUser,
-  color: Player,
-  actor: Option[ActorRef],
-  disconnectTime: Option[Long]
+    authUser: AuthUser,
+    color: Player,
+    actor: Option[ActorRef],
+    disconnectTime: Option[Long]
 )
 
-class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
+class LobbyActor(
+    lobbyId: String,
+    options: LobbyOptions,
+    gameRepository: FirestoreGameRepository
+) extends Actor {
   private val controller: IController = options.apply()
   private val users = mutable.Map.empty[String, PlayerSlot]
   private var gameStarted = false;
+  private var gameEnd = false;
+
+  val gameTurn = GameTurn(
+    currentPlayer = Player.White,
+    turnStartedAt = Instant.now(),
+    onTick = (player, seconds) => {
+      broadcast(TimerTick(player, seconds))
+    },
+    onTimeOut = player => onTimeOut(player)
+  )(using scheduler = context.system.scheduler, ec = context.dispatcher)
+
+  def onTimeOut(player: Player) = {
+    gameEnd = true
+    val winner = users.map { case (uid, slot) =>
+    GamePlayer(uid, slot.authUser.name.getOrElse("Anonym"), slot.color)
+  }.toSeq.find(_.color != player)
+
+    gameRepository.finishGame(
+      lobbyId,
+      users.map { case (uid, slot) =>
+        GamePlayer(
+          uid = uid,
+          name = slot.authUser.name.getOrElse("Anonym"),
+          color = slot.color
+        )
+      }.toSeq,
+      winner = winner,
+      options = options,
+      cancelled = true
+    )
+  }
 
   def receive: Receive = {
     case Join(user, ref) =>
@@ -33,7 +73,11 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
         case Some(slot @ PlayerSlot(_, color, None, _)) =>
           users(user.uid) = slot.copy(actor = Some(ref), disconnectTime = None)
           ref ! PlayerAssigned(color)
-          ref ! GameUpdate(controller.game, controller.currentPlayer, controller.dice)
+          ref ! GameUpdate(
+            controller.game,
+            controller.currentPlayer,
+            controller.dice
+          )
           broadcastLobbyUpdate()
           broadcast(s"${user.name.getOrElse(color)} reconnected")
 
@@ -49,9 +93,31 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
           users += user.uid -> slot
 
           ref ! PlayerAssigned(color)
-          ref ! GameUpdate(controller.game, controller.currentPlayer, controller.dice)
+          ref ! GameUpdate(
+            controller.game,
+            controller.currentPlayer,
+            controller.dice
+          )
           if (users.size == 2) {
             gameStarted = true
+            gameRepository.createGame(
+              GameRecord(
+                lobbyId,
+                System.currentTimeMillis(),
+                None,
+                users.map { case (uid, slot) =>
+                  GamePlayer(
+                    uid = uid,
+                    name = slot.authUser.name.getOrElse("Anonym"),
+                    color = slot.color
+                  )
+                }.toSeq,
+                None,
+                Array.empty[StoredMove],
+                false
+              )
+            )
+            gameTurn.start(controller.currentPlayer, true)
           }
           broadcastLobbyUpdate()
           broadcast(s"${user.name.getOrElse(color)} joined the lobby")
@@ -60,7 +126,7 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
         case None =>
           ref ! ServerInfo("Lobby is full")
           context.stop(ref)
-    }
+      }
     case BroadcastMessage(user, text) =>
       broadcast(ChatBroadcast(user.name.getOrElse("Guest"), text))
     case Leave(user) =>
@@ -85,26 +151,52 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
 
           if (elapsed >= 60000) {
             broadcast(s"Game cancelled: $user disconnected for too long.")
-           // cancelGame()           // implement logic
+            // cancelGame()           // implement logic
           }
 
         // Player has reconnected → do nothing
         case _ =>
       }
-    case Move(user, from, to) => 
-      users.get(user.uid) match {
-        case Some(PlayerSlot(user, color, Some(actor), disconnectTime)) => 
-          if (color != controller.currentPlayer) {
-            actor ! ServerInfo("It's not your turn!")
-          } else {
-            val move = de.htwg.se.backgammon.model.base.Move.create(
-              controller.game, controller.currentPlayer, from.toInt, to.toInt
-            ) 
-            controller.doAndPublish(controller.put, move)
-            broadcast(GameUpdate(controller.game, controller.currentPlayer, controller.dice))
+    case Move(user, from, to) =>
+      if (gameStarted && !gameEnd) {
+        users.get(user.uid) match {
+          case Some(PlayerSlot(user, color, Some(actor), disconnectTime)) =>
+            if (color != controller.currentPlayer) {
+              actor ! ServerInfo("It's not your turn!")
+            } else {
+              val move = de.htwg.se.backgammon.model.base.Move.create(
+                controller.game,
+                controller.currentPlayer,
+                from.toInt,
+                to.toInt
+              )
+              val fields = List.from(controller.game.fields);
+              controller.doAndPublish(controller.put, move)
+              gameTurn.start(controller.currentPlayer)
 
-          }
-        case _ => 
+              if (!controller.game.fields.sameElements(fields)) {
+                gameRepository.appendMove(
+                  lobbyId = lobbyId,
+                  move = StoredMove(
+                    color.toString(),
+                    from.toInt,
+                    to.toInt,
+                    System.currentTimeMillis()
+                  )
+                )
+              }
+
+              broadcast(
+                GameUpdate(
+                  controller.game,
+                  controller.currentPlayer,
+                  controller.dice
+                )
+              )
+
+            }
+          case _ =>
+        }
       }
     case GetLobbyState =>
       sender() ! LobbyState(gameStarted, options.scope)
@@ -122,7 +214,11 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
           )
         }
 
-    val update = LobbyUpdate(white= getUser(Player.White), black= getUser(Player.Black), gameStarted)
+    val update = LobbyUpdate(
+      white = getUser(Player.White),
+      black = getUser(Player.Black),
+      gameStarted
+    )
     users.values.flatMap(_.actor).foreach(_ ! update)
   }
 
@@ -132,8 +228,10 @@ class LobbyActor(lobbyId: String, options: LobbyOptions) extends Actor {
   }
 
   private def broadcast(msg: String): Unit = {
-    println(s"send broadcast (${lobbyId}) " +
-      s"to ${users}")
+    println(
+      s"send broadcast (${lobbyId}) " +
+        s"to ${users}"
+    )
     users.values.flatMap(_.actor).foreach(_ ! ServerInfo(msg))
   }
 }

@@ -25,3 +25,7 @@ GET     /lobby/:lobbyId/ws     controllers.LobbyController.joinLobby(lobbyId: St
 GET     /queue-ws              controllers.LobbyController.socket
 
 GET    /matchmaking/count     controllers.LobbyController.countPublicWaiting()
+
+GET    /user/:uid              controllers.UserController.fetchUser(uid: String)
+GET   /user/:uid/games         controllers.UserController.fetchUserGames(uid: String, page: Int ?= 1, pageSize: Int ?= 5)
+
